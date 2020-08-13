@@ -39,6 +39,21 @@ The topic listened to is *concord/*. Options include:
 *  concord/arm/stay
 *  concord/disarm
 
+## Home Assistant
+
+You can create entities in Home Assistant to represent the various sensors by adding MQTT library to HA, and then editing the *configuration.yaml* file to include something like:
+
+    # MQTT binary sensor
+    binary_sensor:
+        - platform: mqtt
+        name: "Front Door"
+        state_topic: "concord/zone/1"
+        payload_on: "open"
+        payload_off: "closed"
+        device_class: opening
+
+This adds the front door sensor as an entity you can put on any dashboard.
+
 ## Notes
 
 The previous ST version supported 'loud' as an option for arming / disarming, but I didn't implement that as my panel doesn't support it anyways. If desired it could be added back as the payload for the various topics.
