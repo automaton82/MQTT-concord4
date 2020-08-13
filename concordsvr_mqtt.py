@@ -23,7 +23,6 @@ Developed from py-concord Copyright (c) 2013, Douglas S. J. De Couto, decouto@al
 
 import os
 import sys
-import asyncore, asynchat
 import time
 from threading import Thread
 from collections import deque
@@ -760,43 +759,35 @@ class PanelConcurrentThread(Thread):
             log.debug("Got StopThread in PanelConcurrentThread")
             pass
 
-class ConcordMQTT(Thread):
+class ConcordMQTT(object):
 
     def __init__(self, config):
         ''' Constructor. '''
 
         #Store config
         self._config = config
-
-        Thread.__init__(self)
-        self.StopThread = False
-        self.daemon = True
         self.client = None
 
-    def run(self):
-        try:
-            self.client = mqtt.Client()
-            self.client.on_connect = self.on_connect
-            self.client.on_message = self.on_message
+    def startup(self):
+        self.client = mqtt.Client()
+        self.client.on_connect = self.on_connect
+        self.client.on_message = self.on_message
 
-            self.client.connect(config.HOST, config.PORT, 60)
+        self.client.connect(config.HOST, config.PORT, 60)
 
-            # Blocking call that processes network traffic, dispatches callbacks and
-            # handles reconnecting.
-            # Other loop*() functions are available that give a threaded interface and a
-            # manual interface.
-            logger('MQTT setup for '+str(config.HOST)+':'+str(config.PORT))
-            self.client.loop_forever()
-        except self.StopThread:
-            self.client.disconnect()
-            log.debug("Got StopThread in ConcordMQTT")
-            pass
+        # Blocking call that processes network traffic, dispatches callbacks and
+        # handles reconnecting.
+        # Other loop*() functions are available that give a threaded interface and a
+        # manual interface.
+        logger('MQTT setup for '+str(config.HOST)+':'+str(config.PORT))
+        self.client.loop_start()
 
-
+    def end(self):
+        self.client.loop_stop()
 
     # The callback for when the client receives a CONNACK response from the server.
     def on_connect(self, client, userdata, flags, rc):
-        logger("Connected with result code "+str(rc))
+        logger("MQTT connected with result code "+str(rc))
 
         # Subscribing in on_connect() means that if we lose the connection and
         # reconnect then subscriptions will be renewed.
@@ -844,8 +835,8 @@ class MQTTUpdate(Thread):
         
         time.sleep(self.senddelay) #dont update smartthings, wait until panel is disarmed
         topic = 'concord/'+self.topic
-        publish.single('concord/'+topic, self.value, hostname=config.HOST, port=config.PORT)
         logger('TX -> '+str(config.HOST)+':'+str(config.PORT)+' - '+topic+'/'+self.value)
+        publish.single('concord/'+topic, self.value, hostname=config.HOST, port=config.PORT)
 
 if __name__ == '__main__':
     args = sys.argv[1:]
@@ -855,17 +846,17 @@ if __name__ == '__main__':
     concord_interface = ConcordSvr()
     concord_interface.startup()
     concord_mqtt = ConcordMQTT(config)
-    concord_mqtt.start()
+    concord_mqtt.startup()
     concord_panel_thread = PanelConcurrentThread(concord_interface.panel)
     concord_panel_thread.start()
 
     try:
         while True:
-            asyncore.loop(timeout=2, count=1)
-            # insert scheduling code here.
+            time.sleep(1)
     except KeyboardInterrupt:
         print "Crtl+C pressed. Shutting down."
         logger('Shutting down from Ctrl+C')
+        concord_mqtt.end()
         concord_panel_thread.panel = None
         concord_panel_thread.StopThread = True
         sys.exit()
