@@ -213,7 +213,9 @@ class Concord4ServerConfig():
         self.LOGLEVEL = self.read_config_var('main', 'loglevel', '', 'str')
         self.HOST = self.read_config_var('main', 'host', '', 'str')
         self.PORT = self.read_config_var('main', 'port', 1883, 'int')
-
+        self.EMAILSENDER = self.read_config_var('main', 'emailsender', '', 'str')
+        self.EMAILPASSWORD = self.read_config_var('main', 'emailpassword', '', 'str')
+        self.EMAILRECIPIENT = self.read_config_var('main', 'emailrecipient', '', 'str')
 
     def defaulting(self, section, variable, default, quiet = False):
         if quiet == False:
@@ -305,7 +307,7 @@ class ConcordSvr(object):
             email_message = "NEW STATE: " + str(eventInfo['zone_state']) + "\nPREVIOUS STATE: " + str(eventInfo['prev_zone_state']) + "\nCOMMAND: " + str(eventInfo['command'] + "\nDATE: " + str(event_time))
             log.info("Sending Email... ")
             log.debug("Email Contents:" + email_subject + "\n" + email_message)
-            send_email("my_send_email_as_base_64@gmail.com".decode('base64'), "my_password_as_base_64".decode('base64'), "target_email_as_base_64@somewhere.com".decode('base64'), email_subject, email_message)
+            send_email(config.EMAILSENDER.decode('base64'), config.EMAILPASSWORD.decode('base64'), config.EMAILRECIPIENT.decode('base64'), email_subject, email_message)
 
         if isErr:
             self._logEvent(eventInfo, event_time, self.errLog, self.errLogDays)
@@ -856,6 +858,7 @@ if __name__ == '__main__':
     concord_mqtt.start()
     concord_panel_thread = PanelConcurrentThread(concord_interface.panel)
     concord_panel_thread.start()
+
     try:
         while True:
             asyncore.loop(timeout=2, count=1)
