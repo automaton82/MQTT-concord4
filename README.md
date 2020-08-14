@@ -22,6 +22,7 @@ As such I'm moving to Home Assistant and still want to use this integration. Sin
 
 1. Edit *concordsvr_mqtt.conf* with your favourite editor, such as *nano concordsvr_mqtt.conf*
     * Set *host* to the host of your MQTT, and the *port*
+    * Set *mqttuser* to the base64 encoded name of the user to login, and *mqttpassword* to the base64 encoded password of that user
 2.  Start the program using **python concordsvr_mqtt.py**
 3.  If desired, it can be started on every boot by using *crontab -e* and adding:
     * *@reboot cd /home/pi/ && ./start_concordsvr &*
