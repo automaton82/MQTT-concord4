@@ -31,6 +31,31 @@ As such I'm moving to Home Assistant and still want to use this integration. Sin
     * *#!/bin/bash*
     * *cd /home/pi/concordsvr/ && python ./concordsvr_mqtt.py*
 
+## Home Assistant
+
+You can create entities in Home Assistant to represent the various sensors by adding MQTT library to HA, and then editing the *configuration.yaml* file to include something like:
+
+    # MQTT binary sensor
+    binary_sensor:
+        - platform: mqtt
+        name: "Front Door"
+        state_topic: "concord/zone/1"
+        payload_on: "open"
+        payload_off: "closed"
+        device_class: opening
+
+This adds the front door sensor as an entity you can put on any dashboard.
+
+The alarm entity can be created with the following item in the configuration:
+
+    # Alarm setup
+    alarm_control_panel:
+        - platform: mqtt
+        state_topic: "concord/alarm"
+        command_topic: "concord/alarm/set"
+        code_arm_required: false
+        code_disarm_required: false
+
 ## MQTT
 
 The topic listened to is *concord/#*. The topic to set is:
@@ -56,31 +81,6 @@ With payloads of:
 * armed_home
 * armed_away
 * disarmed
-
-## Home Assistant
-
-You can create entities in Home Assistant to represent the various sensors by adding MQTT library to HA, and then editing the *configuration.yaml* file to include something like:
-
-    # MQTT binary sensor
-    binary_sensor:
-        - platform: mqtt
-        name: "Front Door"
-        state_topic: "concord/zone/1"
-        payload_on: "open"
-        payload_off: "closed"
-        device_class: opening
-
-This adds the front door sensor as an entity you can put on any dashboard.
-
-The alarm entity can be created with the following item in the configuration:
-
-    # Alarm setup
-    alarm_control_panel:
-        - platform: mqtt
-        state_topic: "concord/alarm"
-        command_topic: "concord/alarm/set"
-        code_arm_required: false
-        code_disarm_required: false
 
 ## Notes
 
