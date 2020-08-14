@@ -1,10 +1,8 @@
 # MQTT-concord4
 
-This is based off the original device-concord4 here:
-https://github.com/automaton82/device-concord4
+This is based off the original [device-concord4 here](https://github.com/automaton82/device-concord4).
 
-Which is forked from the original here:
-https://github.com/csdozier/device-concord4
+Which is forked from the [original here](https://github.com/csdozier/device-concord4).
 
 The original concord4 was made for SmartThings via a web-server. Since SmartThings is now sun-setting classic along with custom DTH UIs, it no longer works.
 
@@ -33,7 +31,7 @@ As such I'm moving to Home Assistant and still want to use this integration. Sin
 
 ## Home Assistant
 
-You can create entities in Home Assistant to represent the various sensors by adding MQTT library to HA, and then editing the *configuration.yaml* file to include something like:
+You can create entities in Home Assistant to represent the various sensors by [adding MQTT library to HA](https://www.home-assistant.io/integrations/mqtt/), and then editing the *configuration.yaml* file to include something like:
 
     # MQTT binary sensor
     binary_sensor:
@@ -46,7 +44,7 @@ You can create entities in Home Assistant to represent the various sensors by ad
 
 This adds the front door sensor as an entity you can put on any dashboard.
 
-The alarm entity can be created with the following item in the configuration:
+The [alarm entity can be created](https://www.home-assistant.io/integrations/alarm_control_panel.mqtt/) with the following item in the configuration:
 
     # Alarm setup
     alarm_control_panel:
