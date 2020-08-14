@@ -32,12 +32,29 @@ As such I'm moving to Home Assistant and still want to use this integration. Sin
 
 ## MQTT
 
-The topic listened to is *concord/*. Options include:
+The topic listened to is *concord/#*. The topic to set is:
 
-*  concord/refresh
-*  concord/arm/away
-*  concord/arm/stay
-*  concord/disarm
+* concord/alarm/set
+
+With payloads of:
+
+* arm_home
+* arm_away
+* disarm
+
+The device will send out messages like:
+
+* concord/zone/x
+
+Where x is the zone number, like 1. Payload is 'open' or 'closed. It also sends:
+
+* concord/alarm
+
+With payloads of:
+
+* armed_home
+* armed_away
+* disarmed
 
 ## Home Assistant
 
@@ -53,6 +70,16 @@ You can create entities in Home Assistant to represent the various sensors by ad
         device_class: opening
 
 This adds the front door sensor as an entity you can put on any dashboard.
+
+The alarm entity can be created with the following item in the configuration:
+
+    # Alarm setup
+    alarm_control_panel:
+        - platform: mqtt
+        state_topic: "concord/alarm"
+        command_topic: "concord/alarm/set"
+        code_arm_required: false
+        code_disarm_required: false
 
 ## Notes
 
