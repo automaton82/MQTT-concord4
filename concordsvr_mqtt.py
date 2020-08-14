@@ -106,12 +106,14 @@ def send_email(user, pwd, recipient, subject, body):
 #
 # Send an MQTT update. This has to be on the main thread due to some sort of bug in the MQTT library
 #
-def send_mqtt_update(topic, value, senddelay=0):
-    if senddelay > 0:
-        time.sleep(senddelay) #dont update, wait until panel is disarmed
+def send_mqtt_update(topic, value):
     topic = 'concord/'+topic
     logger('TX -> '+str(config.HOST)+':'+str(config.PORT)+' - '+topic+' - '+value)
-    publish.single(topic, value, hostname=config.HOST, port=config.PORT, auth = {'username':config.MQTTUSER.decode('base64'),'password':config.MQTTPASSWORD.decode('base64')})
+
+    try:
+        publish.single(topic, value, hostname=config.HOST, port=config.PORT, auth = {'username':config.MQTTUSER.decode('base64'),'password':config.MQTTPASSWORD.decode('base64')})
+    except:
+        logger("MQTT failed to publish message...")
 
 def zonekey(zoneDev):
     """ Return internal key for supplied Indigo zone device. """
@@ -257,8 +259,7 @@ class ConcordSvr(object):
         self.panelDev = None
         self.panelInitialQueryDone = False
         self.StopThread = False
-        self.armed = False
-        self.event_send_time = int(time.time())
+        self.armed = None
         self.serialPortUrl = config.SERIALPORT
 
         # Zones are keyed by (partitition number, zone number)
@@ -320,6 +321,9 @@ class ConcordSvr(object):
             log.debug("Email Contents:" + email_subject + "\n" + email_message)
             send_email(config.EMAILSENDER.decode('base64'), config.EMAILPASSWORD.decode('base64'), config.EMAILRECIPIENT.decode('base64'), email_subject, email_message)
 
+            # Update MQTT
+            updateStateOnMQTT('alarm','triggered')
+
         if isErr:
             self._logEvent(eventInfo, event_time, self.errLog, self.errLogDays)
 
@@ -332,9 +336,9 @@ class ConcordSvr(object):
               'command_data': cmdData }
         self.logEvent(d, isErr)
 
-    def updateStateOnMQTT(self, topic, value, senddelay=0):
+    def updateStateOnMQTT(self, topic, value):
         # Store message in queue for main thread to deal with
-        mqttMessageQueue.append({'topic':topic,'value':value,'senddelay':senddelay})
+        mqttMessageQueue.append({'topic':topic,'value':value})
 
     def updateStateOnServer(self,item,variable,state):
         log.debug(str(item)+' | '+str(variable)+':'+str(state))
@@ -591,10 +595,7 @@ class ConcordSvr(object):
             # zone.
             if len(new_zone_state) == 0:
                 zs = 'closed'
-                delay = (self.event_send_time - int(time.time()))+1
-                if delay < 0:
-                    delay = 0
-                self.updateStateOnMQTT('zone/'+str(zone_num),'closed',senddelay=delay)
+                self.updateStateOnMQTT('zone/'+str(zone_num),'closed')
             elif FAULTED in new_zone_state or TROUBLE in new_zone_state:
                 zs = 'faulted'
             elif ALARM in new_zone_state:
@@ -604,10 +605,7 @@ class ConcordSvr(object):
                 zs = 'open'
                 delay = 0
                 zone = 'zone'+str(zone_num)
-                if self.armed and (('zone1' in zone) or ('zone2' in zone)):
-                    self.event_send_time = int(time.time()) + 30
-                    delay = 30
-                self.updateStateOnMQTT('zone/'+str(zone_num),'open',senddelay=delay)
+                self.updateStateOnMQTT('zone/'+str(zone_num),'open')
             elif BYPASSED in new_zone_state:
                 zs = 'disabled'
             else:
@@ -639,18 +637,12 @@ class ConcordSvr(object):
                 log.info('System is ARMED to STAY')
                 self.armed = True
                 self.updateStateOnServer('armstatus','arm_level','armed_stay')
-                delay = (self.event_send_time - int(time.time()))+1
-                if delay < 0:
-                    delay = 0
-                self.updateStateOnMQTT('alarm','armed_stay',senddelay=delay)
+                self.updateStateOnMQTT('alarm','armed_home')
             elif int(msg['arming_level_code']) == 3:
                 log.info('System is ARMED to AWAY')
                 self.armed = True
-                delay = (self.event_send_time - int(time.time()))+1
-                if delay < 0:
-                    delay = 0
                 self.updateStateOnServer('armstatus','arm_level','armed_away')
-                self.updateStateOnMQTT('alarm','armed_away',senddelay=delay)
+                self.updateStateOnMQTT('alarm','armed_away')
 
         elif cmd_id in ('PART_DATA', 'FEAT_STATE', 'DELAY', 'TOUCHPAD'):
             part_num = msg['partition_number']
@@ -674,6 +666,24 @@ class ConcordSvr(object):
                 part_info = msg.copy()
                 del part_info['command_id']
                 self.parts[part_num] = part_info
+
+            # Update arming level on MQTT if present and we haven't updated it yet
+            if self.armed is None:
+                armingLevel = msg.get('arming_level')
+                armingLevelCode = msg.get('arming_level_code')
+                if armingLevel is not None and armingLevelCode is not None:
+                    if int(armingLevelCode) == 1:
+                        log.info('System is DISARMED')
+                        self.armed = False
+                        self.updateStateOnMQTT('alarm','disarmed')
+                    elif int(armingLevelCode) == 2:
+                        log.info('System is ARMED to STAY')
+                        self.armed = True
+                        self.updateStateOnMQTT('alarm','armed_home')
+                    elif int(armingLevelCode) == 3:
+                        log.info('System is ARMED to AWAY')
+                        self.armed = True
+                        self.updateStateOnMQTT('alarm','armed_away')
 
             if part_num in self.partDevs:
                 self.updatePartitionDeviceState(self.partDevs[part_num], part_num)
@@ -701,7 +711,6 @@ class ConcordSvr(object):
                 part_state = self.getPartitionState(part_num)
                 use_err_log = cmd_id != 'PART_DATA' or old_part_state != part_state or part_state != 'ready'
                 self.logEvent(msg, use_err_log)
-
 
         elif cmd_id == 'EQPT_LIST_DONE':
             if not self.panelInitialQueryDone:
@@ -781,8 +790,18 @@ class ConcordMQTT(object):
         self.client = mqtt.Client()
         self.client.on_connect = self.on_connect
         self.client.on_message = self.on_message
+        self.client.on_log = self.on_log
 
-        self.client.connect(config.HOST, config.PORT, 60)
+        self.client.username_pw_set(config.MQTTUSER.decode('base64'),config.MQTTPASSWORD.decode('base64'))
+
+        isConnected = False
+        while not isConnected:
+            try:            
+                self.client.connect(config.HOST, config.PORT, 60)
+                isConnected = True
+            except:
+                logger("MQTT connection failed, trying again in 10 seconds...")
+                time.sleep(10)
 
         # Blocking call that processes network traffic, dispatches callbacks and
         # handles reconnecting.
@@ -797,36 +816,35 @@ class ConcordMQTT(object):
 
     # The callback for when the client receives a CONNACK response from the server.
     def on_connect(self, client, userdata, flags, rc):
+
+        # Any rc but 0 is a failure to connect
         logger("MQTT connected with result code "+str(rc))
 
         # Subscribing in on_connect() means that if we lose the connection and
         # reconnect then subscriptions will be renewed.
-        #client.subscribe("$SYS/#")
         client.subscribe("concord/#")
 
     # The callback for when a PUBLISH message is received from the server.
     def on_message(self, client, userdata, msg):
-        logger("RX -> " + msg.topic+" "+str(msg.payload))
+        logger("RX -> "+msg.topic+" - "+msg.payload)
 
         # Handle message
-        topic = msg.topic
-        value = msg.payload
-        if 'concord/refresh' in topic:
-            concord_interface.refreshPanelState("Reacting to web poll request...")
-            logger("MQTT - Refreshing Concord...")
-        elif 'concord/arm' in topic:
-            if 'stay' in value:
+        topic = msg.topic.lower()
+        value = msg.payload.lower()
+        if topic == 'concord/alarm/set':
+            if value == 'arm_home':
                 concord_interface.ArmDisarm(action='stay')
                 logger("MQTT - Arming System to STAY...")
-            if 'away' in value:
+            elif value == 'arm_away':
                 concord_interface.ArmDisarm(action='away')
                 logger("MQTT - Arming System to AWAY...")
-        elif 'concord/disarm' in topic:
-            concord_interface.ArmDisarm(action='disarm')
-            logger("MQTT - Disarm System...")
-        elif 'concord/keypress' in topic:
-            concord_interface.send_key_press(key=[hex(int(value))])
-            logger("MQTT - Sending Keypress...")
+            elif value == 'disarm':
+                concord_interface.ArmDisarm(action='disarm')
+                logger("MQTT - Disarm System...")
+
+    # The callback for logging
+    def on_log(self, client, userdata, level, buf):
+        log.debug("MQTT LOG - " + str(buf))
 
 if __name__ == '__main__':
     args = sys.argv[1:]
@@ -854,7 +872,7 @@ if __name__ == '__main__':
                 time.sleep(1)
             else:
                 for message in mqttMessageQueue:
-                    send_mqtt_update(message['topic'],message['value'],message['senddelay'])
+                    send_mqtt_update(message['topic'],message['value'])
                 mqttMessageQueue = []
 
     except KeyboardInterrupt:
