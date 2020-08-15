@@ -111,7 +111,7 @@ def send_mqtt_update(topic, value):
     logger('TX -> '+str(config.HOST)+':'+str(config.PORT)+' - '+topic+' - '+value)
 
     try:
-        publish.single(topic, value, hostname=config.HOST, port=config.PORT, auth = {'username':config.MQTTUSER.decode('base64'),'password':config.MQTTPASSWORD.decode('base64')})
+        publish.single(topic, value, hostname=config.HOST, port=config.PORT, retain=True, auth = {'username':config.MQTTUSER.decode('base64'),'password':config.MQTTPASSWORD.decode('base64')})
     except:
         logger("MQTT failed to publish message...")
 
@@ -785,6 +785,7 @@ class ConcordMQTT(object):
         #Store config
         self._config = config
         self.client = None
+        self.hasConnectedOnce = False
 
     def startup(self):
         self.client = mqtt.Client()
@@ -820,9 +821,17 @@ class ConcordMQTT(object):
         # Any rc but 0 is a failure to connect
         logger("MQTT connected with result code "+str(rc))
 
-        # Subscribing in on_connect() means that if we lose the connection and
-        # reconnect then subscriptions will be renewed.
-        client.subscribe("concord/#")
+        if rc == 0:
+            # Subscribing in on_connect() means that if we lose the connection and
+            # reconnect then subscriptions will be renewed.
+            client.subscribe("concord/#")
+
+            if self.hasConnectedOnce:
+
+                # Issue panel refresh to cause MQTT refresh
+                concord_interface.refreshPanelState("Reacting to MQTT re-connection...")
+
+            self.hasConnectedOnce = True
 
     # The callback for when a PUBLISH message is received from the server.
     def on_message(self, client, userdata, msg):
