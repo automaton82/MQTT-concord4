@@ -322,7 +322,7 @@ class ConcordSvr(object):
             send_email(config.EMAILSENDER.decode('base64'), config.EMAILPASSWORD.decode('base64'), config.EMAILRECIPIENT.decode('base64'), email_subject, email_message)
 
             # Update MQTT
-            updateStateOnMQTT('alarm','triggered')
+            self.updateStateOnMQTT('alarm','triggered')
 
         if isErr:
             self._logEvent(eventInfo, event_time, self.errLog, self.errLogDays)
@@ -403,7 +403,7 @@ class ConcordSvr(object):
             log.error(str(ex))
             return False
 
-    def ArmDisarm(self, action='stay', arm_silent = True, bypasszone='',partition_num=1):
+    def ArmDisarm(self, action='stay', arm_silent = False, bypasszone='',partition_num=1):
         log.debug("Menu item: Arm/Disarm: %s" % str(action))
 
         errors = {}
